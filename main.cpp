@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#include "task_mesh_rendering.h"
+#include "src/task_mesh_rendering.h"
 
 int main()
 {

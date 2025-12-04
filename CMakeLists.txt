@@ -14,15 +14,30 @@ add_subdirectory(extern/meshoptimizer)
 
 add_executable(TaskMeshRendering
         main.cpp
-        task_mesh_rendering.cpp
-        task_mesh_rendering.h
-        vk_context.cpp
-        vk_context.h
-        vk_resources.cpp
-        vk_resources.h
-        vk_utils.cpp
-        vk_utils.h
-        vk_helpers.cpp
+        src/task_mesh_rendering.cpp
+        src/task_mesh_rendering.h
+        src/vk_context.cpp
+        src/vk_context.h
+        src/vk_swapchain.cpp
+        src/vk_swapchain.h
+        src/vk_synchronization.cpp
+        src/vk_synchronization.h
+        src/vk_imgui_wrapper.cpp
+        src/vk_imgui_wrapper.h
+        src/vk_render_targets.cpp
+        src/vk_render_targets.h
+        src/vk_resources.cpp
+        src/vk_resources.h
+        src/vk_utils.cpp
+        src/vk_utils.h
+        src/vk_helpers.cpp
+        src/vk_helpers.h
+        src/vk_types.cpp
+        src/vk_types.h
+        src/input.cpp
+        src/input.h
+        src/time.cpp
+        src/time.h
 )
 
 target_include_directories(TaskMeshRendering PUBLIC
