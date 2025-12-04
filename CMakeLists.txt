@@ -3,6 +3,8 @@ project(TaskMeshRendering)
 
 set(CMAKE_CXX_STANDARD 20)
 
+# Scroll all the way down for the important part
+
 add_subdirectory(extern/fmt)
 add_subdirectory(extern/SDL EXCLUDE_FROM_ALL)
 add_subdirectory(extern/volk)
@@ -11,52 +13,6 @@ add_subdirectory(extern/vk-bootstrap)
 add_subdirectory(extern/fastgltf)
 add_subdirectory(extern/OffsetAllocator)
 add_subdirectory(extern/meshoptimizer)
-
-add_executable(TaskMeshRendering
-        main.cpp
-        src/task_mesh_rendering.cpp
-        src/task_mesh_rendering.h
-        src/vk_context.cpp
-        src/vk_context.h
-        src/vk_swapchain.cpp
-        src/vk_swapchain.h
-        src/vk_synchronization.cpp
-        src/vk_synchronization.h
-        src/vk_imgui_wrapper.cpp
-        src/vk_imgui_wrapper.h
-        src/vk_render_targets.cpp
-        src/vk_render_targets.h
-        src/vk_resources.cpp
-        src/vk_resources.h
-        src/vk_utils.cpp
-        src/vk_utils.h
-        src/vk_helpers.cpp
-        src/vk_helpers.h
-        src/vk_types.cpp
-        src/vk_types.h
-        src/input.cpp
-        src/input.h
-        src/time.cpp
-        src/time.h
-)
-
-target_include_directories(TaskMeshRendering PUBLIC
-        ${CMAKE_SOURCE_DIR}
-        ${CMAKE_SOURCE_DIR}/extern
-        ${CMAKE_SOURCE_DIR}/fmt/include
-)
-
-target_link_libraries(TaskMeshRendering PUBLIC
-        fmt::fmt
-        volk
-        imgui
-        VulkanMemoryAllocator
-        vk-bootstrap::vk-bootstrap
-        SDL3::SDL3
-        fastgltf
-        offsetAllocator
-        meshoptimizer
-)
 
 # ===== Dear Imgui ===================================
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/extern/imgui)
@@ -137,6 +93,57 @@ function(compile_shaders TARGET)
     endforeach ()
 endfunction()
 # ====================================================
+# ===== The Important Bits ===========================
+add_executable(TaskMeshRendering
+        main.cpp
+        src/task_mesh_rendering.cpp
+        src/task_mesh_rendering.h
+        src/vk_context.cpp
+        src/vk_context.h
+        src/vk_swapchain.cpp
+        src/vk_swapchain.h
+        src/vk_synchronization.cpp
+        src/vk_synchronization.h
+        src/vk_imgui_wrapper.cpp
+        src/vk_imgui_wrapper.h
+        src/vk_render_targets.cpp
+        src/vk_render_targets.h
+        src/vk_resources.cpp
+        src/vk_resources.h
+        src/vk_utils.cpp
+        src/vk_utils.h
+        src/vk_helpers.cpp
+        src/vk_helpers.h
+        src/vk_types.cpp
+        src/vk_types.h
+        src/input.cpp
+        src/input.h
+        src/time.cpp
+        src/time.h
+)
+
+target_include_directories(TaskMeshRendering PUBLIC
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/extern
+        ${CMAKE_SOURCE_DIR}/fmt/include
+)
+
+target_link_libraries(TaskMeshRendering PUBLIC
+        fmt::fmt
+        volk
+        imgui
+        VulkanMemoryAllocator
+        vk-bootstrap::vk-bootstrap
+        SDL3::SDL3
+        fastgltf
+        offsetAllocator
+        meshoptimizer
+)
+
+compile_shaders(TaskMeshRendering
+        ${CMAKE_SOURCE_DIR}/shaders/meshOnly.slang mesh meshMain
+        ${CMAKE_SOURCE_DIR}/shaders/meshOnly.slang fragment fragmentMain
+)
 
 add_custom_command(TARGET TaskMeshRendering POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

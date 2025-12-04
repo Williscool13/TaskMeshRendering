@@ -72,6 +72,7 @@ ImguiWrapper::ImguiWrapper(VulkanContext* context, SDL_Window* window, int32_t s
     // initInfo.PipelineInfoMain.RenderPass = wd->RenderPass;
     initInfo.PipelineInfoMain.Subpass = 0;
     initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    initInfo.MinAllocationSize = 1024 * 1024;
     // initInfo.CheckVkResultFn = check_vk_result;
 
 

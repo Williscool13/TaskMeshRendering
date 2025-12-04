@@ -8,8 +8,15 @@
 #include <fmt/format.h>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <backends/imgui_impl_sdl3.h>
+#include <backends/imgui_impl_vulkan.h>
+#include <fastgltf/core.hpp>
+#include <fastgltf/types.hpp>
+#include <fastgltf/tools.hpp>
 
 #include "input.h"
+#include "meshoptimizer.h"
 #include "time.h"
 #include "vk_context.h"
 #include "vk_helpers.h"
@@ -18,8 +25,6 @@
 #include "vk_swapchain.h"
 #include "vk_types.h"
 #include "vk_utils.h"
-#include "backends/imgui_impl_sdl3.h"
-#include "backends/imgui_impl_vulkan.h"
 
 TaskMeshRendering::TaskMeshRendering() = default;
 
@@ -76,6 +81,8 @@ void TaskMeshRendering::Initialize()
     const VkCommandBufferAllocateInfo allocInfo = VkHelpers::CommandBufferAllocateInfo(1, immCommandPool);
     VK_CHECK(vkAllocateCommandBuffers(context->device, &allocInfo, &immCommandBuffer));
     stagingBuffer = VkResources::CreateAllocatedStagingBuffer(context.get(), 1024 * 32);
+
+    stanfordBunny = LoadStanfordBunny();
 }
 
 void TaskMeshRendering::Run()
@@ -311,4 +318,183 @@ void TaskMeshRendering::Cleanup()
     SDL_DestroyWindow(window);
 }
 
-void TaskMeshRendering::LoadMeshletModel() {}
+ExtractedMeshletModel TaskMeshRendering::LoadStanfordBunny()
+{
+    ExtractedMeshletModel meshletModel{};
+    fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
+    constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
+                                 | fastgltf::Options::AllowDouble
+                                 | fastgltf::Options::LoadExternalBuffers
+                                 | fastgltf::Options::LoadExternalImages;
+
+    const std::filesystem::path path = "asset/stanford_bunny/stanford_bunny.gltf";
+    auto gltfFile = fastgltf::MappedGltfFile::FromPath(path);
+    if (!static_cast<bool>(gltfFile)) {
+        fmt::println("[Error] Failed to open glTF file ({}): {}\n", path.filename().string(), getErrorMessage(gltfFile.error()));
+        exit(1);
+    }
+
+    auto load = parser.loadGltf(gltfFile.get(), path.parent_path(), gltfOptions);
+    if (!load) {
+        fmt::println("[Error] Failed to load glTF: {}\n", to_underlying(load.error()));
+        exit(1);
+    }
+
+    fastgltf::Asset gltf = std::move(load.get());
+    assert(gltf.meshes.size() == 1);
+    assert(gltf.meshes[0].primitives.size() == 1);
+    assert(gltf.nodes.size() == 1);
+
+    meshletModel.bSuccessfullyLoaded = true;
+    meshletModel.name = path.filename().string();
+
+    fastgltf::Primitive& bunnyPrimitive = gltf.meshes[0].primitives[0];
+    meshletModel.primitive.materialIndex = 0;
+
+
+    std::vector<Vertex> primitiveVertices{};
+    std::vector<uint32_t> primitiveIndices{};
+
+    // INDICES
+    const fastgltf::Accessor& indexAccessor = gltf.accessors[bunnyPrimitive.indicesAccessor.value()];
+    primitiveIndices.clear();
+    primitiveIndices.reserve(indexAccessor.count);
+
+    fastgltf::iterateAccessor<std::uint32_t>(gltf, indexAccessor, [&](const std::uint32_t idx) {
+        primitiveIndices.push_back(idx);
+    });
+
+    // POSITION (REQUIRED)
+    const fastgltf::Attribute* positionIt = bunnyPrimitive.findAttribute("POSITION");
+    const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
+    primitiveVertices.clear();
+    primitiveVertices.resize(posAccessor.count);
+
+    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
+        primitiveVertices[index] = {};
+        primitiveVertices[index].position = {v.x(), v.y(), v.z()};
+    });
+
+    const size_t maxVertices = 64;
+    const size_t maxTriangles = 64;
+
+    // build clusters (meshlets) out of the mesh
+    size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
+    std::vector<meshopt_Meshlet> meshlets(max_meshlets);
+    std::vector<unsigned int> meshletVertices(primitiveIndices.size());
+    std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
+
+    std::vector<uint32_t> primitiveVertexPositions;
+    meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+                                          primitiveIndices.data(), primitiveIndices.size(),
+                                          reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                          maxVertices, maxTriangles, 0.f));
+
+    // Optimize each meshlet's micro index buffer/vertex layout individually
+    for (auto& meshlet : meshlets) {
+        meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+    }
+
+    // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
+    {
+        // this is an example of how to trim the vertex/triangle arrays when copying data out to GPU storage
+        const meshopt_Meshlet& last = meshlets.back();
+        meshletVertices.resize(last.vertex_offset + last.vertex_count);
+        meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
+    }
+
+    auto generateBoundingSphere = [](const std::vector<Vertex>& vertices) {
+        glm::vec3 center = {0, 0, 0};
+
+        for (auto&& vertex : vertices) {
+            center += vertex.position;
+        }
+        center /= static_cast<float>(vertices.size());
+
+
+        float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
+        for (size_t i = 1; i < vertices.size(); ++i) {
+            radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
+        }
+        radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
+
+        return glm::vec4(center, radius);
+    };
+
+
+    meshletModel.primitive.meshletOffset = meshletModel.meshlets.size();
+    meshletModel.primitive.meshletCount = meshlets.size();
+    meshletModel.primitive.boundingSphere = generateBoundingSphere(primitiveVertices);
+
+    uint32_t vertexOffset = meshletModel.vertices.size();
+    uint32_t meshletVertexOffset = meshletModel.meshletVertices.size();
+    uint32_t meshletTrianglesOffset = meshletModel.meshletTriangles.size();
+
+    meshletModel.vertices.insert(meshletModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
+    meshletModel.meshletVertices.insert(meshletModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
+    meshletModel.meshletTriangles.insert(meshletModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+
+    for (meshopt_Meshlet& meshlet : meshlets) {
+        meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+            &meshletVertices[meshlet.vertex_offset],
+            &meshletTriangles[meshlet.triangle_offset],
+            meshlet.triangle_count,
+            reinterpret_cast<const float*>(primitiveVertices.data()),
+            primitiveVertices.size(),
+            sizeof(Vertex)
+        );
+
+        meshletModel.meshlets.push_back({
+            .meshletBoundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2],
+                bounds.radius
+            ),
+            .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+            .coneCutoff = bounds.cone_cutoff,
+
+            .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+            .vertexOffset = vertexOffset,
+
+            .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+            .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+            .meshletVerticesCount = meshlet.vertex_count,
+            .meshletTriangleCount = meshlet.triangle_count,
+        });
+    }
+
+
+    fastgltf::Node& node = gltf.nodes[0];
+    glm::vec3 localTranslation{};
+    glm::quat localRotation{};
+    glm::vec3 localScale{};
+    std::visit(
+        fastgltf::visitor{
+            [&](fastgltf::math::fmat4x4 matrix) {
+                glm::mat4 glmMatrix;
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        glmMatrix[i][j] = matrix[i][j];
+                    }
+                }
+
+                localTranslation = glm::vec3(glmMatrix[3]);
+                localRotation = glm::quat_cast(glmMatrix);
+                localScale = glm::vec3(
+                    glm::length(glm::vec3(glmMatrix[0])),
+                    glm::length(glm::vec3(glmMatrix[1])),
+                    glm::length(glm::vec3(glmMatrix[2]))
+                );
+            },
+            [&](fastgltf::TRS transform) {
+                localTranslation = {transform.translation[0], transform.translation[1], transform.translation[2]};
+                localRotation = {transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]};
+                localScale = {transform.scale[0], transform.scale[1], transform.scale[2]};
+            }
+        }
+        , node.transform
+    );
+
+    meshletModel.transform = {localTranslation, localRotation, localScale};
+
+    return meshletModel;
+}

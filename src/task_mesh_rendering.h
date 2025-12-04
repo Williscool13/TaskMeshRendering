@@ -34,8 +34,7 @@ public:
 
     void Cleanup();
 
-
-    void LoadMeshletModel();
+    static ExtractedMeshletModel LoadStanfordBunny();
 
 private:
     SDL_Window* window{nullptr};
@@ -51,6 +50,8 @@ private:
     bool bShouldExit{false};
     uint64_t frameNumber{0};
     SceneData sceneData{};
+
+    ExtractedMeshletModel stanfordBunny;
 
 private: // Immediate to simplify asset upload
     VkFence immFence{VK_NULL_HANDLE};
