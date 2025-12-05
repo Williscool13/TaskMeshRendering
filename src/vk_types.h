@@ -54,6 +54,7 @@ struct SceneData
 struct Vertex
 {
     glm::vec3 position{0.0f};
+    float pad{0.0f};
 };
 
 struct Meshlet

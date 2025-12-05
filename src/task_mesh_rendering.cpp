@@ -108,8 +108,9 @@ void TaskMeshRendering::Initialize()
     // bufferInfo.size = sizeof(MeshletPrimitive) * 100;
     // primitiveBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
 
-    meshOnlyPipeline = MeshOnlyPipeline(context.get());
     taskMeshSamplePipeline = TaskMeshSamplePipeline(context.get());
+    meshOnlyPipeline = MeshOnlyPipeline(context.get());
+    taskMeshPipeline = TaskMeshPipeline(context.get());
 }
 
 void TaskMeshRendering::Run()
@@ -227,6 +228,40 @@ void TaskMeshRendering::DrawMeshOnly(VkExtent2D extents, AllocatedBuffer& curren
     vkCmdEndRendering(cmd);
 }
 
+void TaskMeshRendering::DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const
+{
+    constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
+    const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+    const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthImageView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({extents.width, extents.height}, &colorAttachment, &depthAttachment);
+
+
+    vkCmdBeginRendering(cmd, &renderInfo);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, taskMeshPipeline.pipeline.handle);
+
+    VkViewport viewport = VkHelpers::GenerateViewport(extents.width, extents.height);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor = VkHelpers::GenerateScissor(extents.width, extents.height);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    TaskMeshPipelinePushConstant pushData{
+        .modelMatrix = stanfordBunny.transform.GetMatrix(),
+        .sceneData = currentSceneDataBuffer.address,
+        .vertexBuffer = vertexBuffer.address,
+        .meshletVerticesBuffer = meshletVerticesBuffer.address,
+        .meshletTrianglesBuffer = meshletTrianglesBuffer.address,
+        .meshletBuffer = meshletBuffer.address,
+        .meshletCount = static_cast<uint32_t>(stanfordBunny.meshlets.size())
+    };
+
+    vkCmdPushConstants(cmd, taskMeshPipeline.pipelineLayout.handle, VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(TaskMeshPipelinePushConstant), &pushData);
+    constexpr uint32_t taskDispatchX = 64;
+    uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
+    vkCmdDrawMeshTasksEXT(cmd, xCount, 1, 1);
+    vkCmdEndRendering(cmd);
+}
+
 void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const FrameSynchronization& frameSync, ImDrawDataSnapshot& imDrawDataSnapshot)
 {
     VK_CHECK(vkWaitForFences(context->device, 1, &frameSync.renderFence, true, UINT64_MAX));
@@ -252,6 +287,8 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         sceneData.view = view;
         sceneData.proj = proj;
         sceneData.viewProj = proj * view;
+        sceneData.cameraWorldPos = {cameraPosition, 1.0f};
+        sceneData.frustum = Frustum(sceneData.viewProj);
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         *currentSceneData = sceneData;
     }
@@ -275,8 +312,9 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
-    DrawTaskMeshSample(extents, currentSceneDataBuffer, cmd);
+    //DrawTaskMeshSample(extents, currentSceneDataBuffer, cmd);
     //DrawMeshOnly(extents, currentSceneDataBuffer, cmd);
+    DrawTaskMesh(extents, currentSceneDataBuffer, cmd);
 
 
     // Imgui Draw
@@ -484,7 +522,6 @@ ExtractedMeshletModel TaskMeshRendering::LoadStanfordBunny()
 
     // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
     {
-        // this is an example of how to trim the vertex/triangle arrays when copying data out to GPU storage
         const meshopt_Meshlet& last = meshlets.back();
         meshletVertices.resize(last.vertex_offset + last.vertex_count);
         meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);

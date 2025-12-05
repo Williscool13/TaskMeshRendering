@@ -17,6 +17,7 @@
 #include "vk_synchronization.h"
 #include "vk_types.h"
 #include "pipelines/mesh_only_pipeline.h"
+#include "pipelines/task_mesh_pipeline.h"
 #include "pipelines/task_mesh_sample_pipeline.h"
 
 class TaskMeshRendering
@@ -35,6 +36,8 @@ public:
     void DrawTaskMeshSample(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
 
     void DrawMeshOnly(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
+
+    void DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
 
     void Render(float dt, uint32_t currentFrameInFlight, const FrameSynchronization& frameSync, ImDrawDataSnapshot& imDrawDataSnapshot);
 
@@ -65,8 +68,10 @@ private:
     AllocatedBuffer primitiveBuffer;
 
     ExtractedMeshletModel stanfordBunny;
+
     MeshOnlyPipeline meshOnlyPipeline;
     TaskMeshSamplePipeline taskMeshSamplePipeline;
+    TaskMeshPipeline taskMeshPipeline;
 
 private: // Immediate to simplify asset upload
     VkFence immFence{VK_NULL_HANDLE};
@@ -74,6 +79,7 @@ private: // Immediate to simplify asset upload
     VkCommandBuffer immCommandBuffer{VK_NULL_HANDLE};
     AllocatedBuffer stagingBuffer{};
     OffsetAllocator::Allocator stagingAllocator{1024 * 32};
+
 };
 
 

@@ -2,7 +2,7 @@
 // Created by William on 2025-12-05.
 //
 
-#include "task_mesh_sample_pipeline.h"
+#include "task_mesh_pipeline.h"
 
 #include <fmt/format.h>
 
@@ -10,16 +10,16 @@
 #include "src/vk_pipelines.h"
 #include "src/vk_render_targets.h"
 
-TaskMeshSamplePipeline::TaskMeshSamplePipeline() = default;
+TaskMeshPipeline::TaskMeshPipeline() = default;
 
-TaskMeshSamplePipeline::~TaskMeshSamplePipeline() = default;
+TaskMeshPipeline::~TaskMeshPipeline() = default;
 
-TaskMeshSamplePipeline::TaskMeshSamplePipeline(VulkanContext* context) : context(context)
+TaskMeshPipeline::TaskMeshPipeline(VulkanContext* context) : context(context)
 {
     VkPushConstantRange renderPushConstantRange{};
     renderPushConstantRange.offset = 0;
-    renderPushConstantRange.size = sizeof(TaskMeshSamplePipelinePushConstant);
-    renderPushConstantRange.stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT;
+    renderPushConstantRange.size = sizeof(TaskMeshPipelinePushConstant);
+    renderPushConstantRange.stageFlags = VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -33,21 +33,20 @@ TaskMeshSamplePipeline::TaskMeshSamplePipeline(VulkanContext* context) : context
     VkShaderModule taskShader;
     VkShaderModule meshShader;
     VkShaderModule fragShader;
-    if (!VkHelpers::LoadShaderModule("shaders\\sample_task.spv", context->device, &taskShader)) {
-        fmt::println("Couldn't create shader module (sample_task)");
+    if (!VkHelpers::LoadShaderModule("shaders\\taskMesh_task.spv", context->device, &taskShader)) {
+        fmt::println("Couldn't create shader module (taskMesh_task)");
         exit(1);
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\sample_mesh.spv", context->device, &meshShader)) {
-        fmt::println("Couldn't create shader module (sample_mesh)");
+    if (!VkHelpers::LoadShaderModule("shaders\\taskMesh_mesh.spv", context->device, &meshShader)) {
+        fmt::println("Couldn't create shader module (taskMesh_mesh)");
         exit(1);
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\sample_fragment.spv", context->device, &fragShader)) {
-        fmt::println("Couldn't create shader module (sample_fragment)");
+    if (!VkHelpers::LoadShaderModule("shaders\\taskMesh_fragment.spv", context->device, &fragShader)) {
+        fmt::println("Couldn't create shader module (taskMesh_fragment)");
         exit(1);
     }
 
     RenderPipelineBuilder pipelineBuilder;
-
     pipelineBuilder.SetTaskMeshShaders(taskShader, meshShader, fragShader);
     pipelineBuilder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
@@ -63,7 +62,7 @@ TaskMeshSamplePipeline::TaskMeshSamplePipeline(VulkanContext* context) : context
     vkDestroyShaderModule(context->device, fragShader, nullptr);
 }
 
-TaskMeshSamplePipeline::TaskMeshSamplePipeline(TaskMeshSamplePipeline&& other) noexcept
+TaskMeshPipeline::TaskMeshPipeline(TaskMeshPipeline&& other) noexcept
 {
     pipelineLayout = std::move(other.pipelineLayout);
     pipeline = std::move(other.pipeline);
@@ -71,7 +70,7 @@ TaskMeshSamplePipeline::TaskMeshSamplePipeline(TaskMeshSamplePipeline&& other) n
     other.context = nullptr;
 }
 
-TaskMeshSamplePipeline& TaskMeshSamplePipeline::operator=(TaskMeshSamplePipeline&& other) noexcept
+TaskMeshPipeline& TaskMeshPipeline::operator=(TaskMeshPipeline&& other) noexcept
 {
     if (this != &other) {
         pipelineLayout = std::move(other.pipelineLayout);

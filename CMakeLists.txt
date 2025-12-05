@@ -126,8 +126,6 @@ add_executable(TaskMeshRendering
         src/pipelines/mesh_only_pipeline.h
         src/pipelines/task_mesh_pipeline.cpp
         src/pipelines/task_mesh_pipeline.h
-        src/pipelines/task_mesh_indirect_pipeline.cpp
-        src/pipelines/task_mesh_indirect_pipeline.h
         src/pipelines/task_mesh_sample_pipeline.cpp
         src/pipelines/task_mesh_sample_pipeline.h
 )
@@ -156,6 +154,9 @@ compile_shaders(TaskMeshRendering
         ${CMAKE_SOURCE_DIR}/shaders/sample.slang fragment fragmentMain
         ${CMAKE_SOURCE_DIR}/shaders/meshOnly.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/meshOnly.slang fragment fragmentMain
+        ${CMAKE_SOURCE_DIR}/shaders/taskMesh.slang task taskMain
+        ${CMAKE_SOURCE_DIR}/shaders/taskMesh.slang mesh meshMain
+        ${CMAKE_SOURCE_DIR}/shaders/taskMesh.slang fragment fragmentMain
 )
 
 add_custom_command(TARGET TaskMeshRendering POST_BUILD

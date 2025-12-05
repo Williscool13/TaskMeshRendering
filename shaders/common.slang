@@ -3,15 +3,19 @@ module common;
 public struct Vertex
 {
     public float3 position;
+    float pad;
 }
 
 public struct Meshlet
 {
     public float4 meshletBoundingSphere;
+
     public float3 coneApex;
     public float coneCutoff;
+
     public float3 coneAxis;
     public uint32_t vertexOffset;
+
     public uint32_t meshletVerticesOffset;
     public uint32_t meshletTriangleOffset;
     public uint32_t meshletVerticesCount;
@@ -24,10 +28,6 @@ public struct MeshletPrimitive
     public uint32_t meshletCount;
     public uint32_t materialIndex;
     public uint32_t bHasTransparent;
-    public uint32_t bHasSkinning;
-    uint32_t padding1;
-    uint32_t padding2;
-    uint32_t padding3;
     public float4 boundingSphere;
 };
 
