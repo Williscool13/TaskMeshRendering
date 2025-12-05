@@ -128,6 +128,10 @@ add_executable(TaskMeshRendering
         src/pipelines/task_mesh_pipeline.h
         src/pipelines/task_mesh_sample_pipeline.cpp
         src/pipelines/task_mesh_sample_pipeline.h
+        src/camera/camera.cpp
+        src/camera/camera.h
+        src/camera/free_camera.cpp
+        src/camera/free_camera.h
 )
 
 target_include_directories(TaskMeshRendering PUBLIC

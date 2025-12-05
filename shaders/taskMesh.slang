@@ -6,11 +6,18 @@ struct VertexOutput
     float4 color : TEXCOORD0;
 };
 
+struct CulledData
+{
+    Atomic<uint32_t> frustumCulled;
+    Atomic<uint32_t> backfaceCulled;
+    Atomic<uint32_t> totalCulled;
+}
 
 struct PushConstant {
     float4x4 modelMatrix;
 
     SceneData* sceneData;
+    CulledData* culledData;
     VertexData* vertexBuffer;
     MeshletVerticesData* meshletVerticesBuffer;
     MeshletTrianglesData* meshletTrianglesBuffer;
@@ -74,6 +81,9 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
             frustumVisible &= (dist >= -worldBounds.w);
         }
         visible &= frustumVisible;
+        if (!frustumVisible) {
+            pushConstant.culledData.frustumCulled.add(1);
+        }
 
         // Backface cull from meshoptimizer.h
         // visible = dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius
@@ -82,11 +92,16 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
         float centerDist = length(cameraToCenter);
         bool backfaceVisible = dot(cameraToCenter, worldConeAxis) < meshlet.coneCutoff * centerDist + meshlet.meshletBoundingSphere.w;
         visible &= backfaceVisible;
+        if (!backfaceVisible) {
+            pushConstant.culledData.backfaceCulled.add(1);
+        }
 
         // todo: send back to show how many culled from imgui
         if (visible) {
             uint index = visibleMeshletCount.add(1);
             sharedPayload.meshletIndices[index] = threadMeshletOffset;
+        } else {
+            pushConstant.culledData->totalCulled.add(1);
         }
     }
 

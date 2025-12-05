@@ -72,6 +72,11 @@ void TaskMeshRendering::Initialize()
         sceneDataBuffers[i] = std::move(VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
     }
 
+    bufferInfo.size = sizeof(CulledData);
+    for (int32_t i = 0; i < 3; ++i) {
+        culledReadbackBuffers[i] = std::move(VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo));
+    }
+
 
     // Immediate
     const VkFenceCreateInfo fenceInfo = VkHelpers::FenceCreateInfo();
@@ -104,10 +109,6 @@ void TaskMeshRendering::Initialize()
     meshletBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
     memcpy(meshletBuffer.allocationInfo.pMappedData, stanfordBunny.meshlets.data(), bufferInfo.size);
 
-    // bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
-    // bufferInfo.size = sizeof(MeshletPrimitive) * 100;
-    // primitiveBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
-
     taskMeshSamplePipeline = TaskMeshSamplePipeline(context.get());
     meshOnlyPipeline = MeshOnlyPipeline(context.get());
     taskMeshPipeline = TaskMeshPipeline(context.get());
@@ -138,8 +139,6 @@ void TaskMeshRendering::Run()
         time.Update();
 
         const float deltaTime = Time::Get().GetDeltaTime();
-        // freeCamera.Update(deltaTime);
-
         const uint32_t currentFrameInFlight = frameNumber % swapchain->imageCount;
 
         FrameSynchronization& currentFrameSync = frameSynchronization[currentFrameInFlight];
@@ -160,10 +159,46 @@ void TaskMeshRendering::GenerateImgui()
     ImGui::NewFrame();
 
     if (ImGui::Begin("Main")) {
-        ImGui::Text("Hello!");
-        static float pos[3] = {cameraPosition.x, cameraPosition.y, cameraPosition.z};
-        if (ImGui::DragFloat3("Camera Position", pos)) {
-            cameraPosition = {pos[0], pos[1], pos[2]};
+        ImGui::SeparatorText("Camera Controls");
+        ImGui::Text("WASD: Move camera");
+        ImGui::Text("Left CTRL/Space: Move down/up");
+        ImGui::Text("Mouse: Look around");
+        ImGui::Text("O/P: Decrease/Increase speed");
+        ImGui::Text("Current speed: %.2f", freeCamera.speed);
+        ImGui::Text("F: Focus application");
+        ImGui::Text("Escape: Quit");
+
+
+        static float pos[3];
+        pos[0] = freeCamera.transform.translation.x;
+        pos[1] = freeCamera.transform.translation.y;
+        pos[2] = freeCamera.transform.translation.z;
+        if (ImGui::DragFloat3("Camera Position", pos, 0.1f)) {
+            freeCamera.transform.translation = {pos[0], pos[1], pos[2]};
+        }
+
+        const char* renderModeNames[] = {"Basic (Sascha)", "Mesh Only", "Task + Mesh (Culling)"};
+        int currentModeIndex = static_cast<int>(currentRenderMode);
+
+        if (ImGui::Combo("Render Mode", &currentModeIndex, renderModeNames, IM_ARRAYSIZE(renderModeNames))) {
+            currentRenderMode = static_cast<RenderMode>(currentModeIndex);
+        }
+
+        switch (currentRenderMode) {
+            case RenderMode::Basic:
+                break;
+            case RenderMode::MeshOnly:
+                break;
+            case RenderMode::TaskMesh:
+                ImGui::SeparatorText("Culling Breakdown");
+                ImGui::Text("Frustum culled: %d", culledData.frustumCulled);
+                ImGui::Text("Backface culled: %d", culledData.backfaceCulled);
+
+                ImGui::SeparatorText("Effective Results");
+                ImGui::Text("Total culled: %d", culledData.totalCulled);
+                ImGui::Text("Rendered: %d / %d", stanfordBunny.meshlets.size() - culledData.totalCulled, stanfordBunny.meshlets.size());
+                ImGui::Text("Total meshlets: %d", stanfordBunny.meshlets.size());
+                break;
         }
     }
 
@@ -173,7 +208,7 @@ void TaskMeshRendering::GenerateImgui()
 
 void TaskMeshRendering::DrawTaskMeshSample(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const
 {
-    constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
+    constexpr VkClearValue colorClear = {.color = {0.0f, 0.15f, 0.05f, 1.0f}};
     const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
     constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
     const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthImageView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -193,7 +228,7 @@ void TaskMeshRendering::DrawTaskMeshSample(VkExtent2D extents, AllocatedBuffer& 
     };
 
     vkCmdPushConstants(cmd, taskMeshSamplePipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(TaskMeshSamplePipelinePushConstant), &pushData);
-    vkCmdDrawMeshTasksEXT(cmd, stanfordBunny.meshlets.size(), 1, 1);
+    vkCmdDrawMeshTasksEXT(cmd, 1, 1, 1);
     vkCmdEndRendering(cmd);
 }
 
@@ -228,7 +263,7 @@ void TaskMeshRendering::DrawMeshOnly(VkExtent2D extents, AllocatedBuffer& curren
     vkCmdEndRendering(cmd);
 }
 
-void TaskMeshRendering::DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const
+void TaskMeshRendering::DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, AllocatedBuffer& currentCulledDataBuffer, VkCommandBuffer cmd) const
 {
     constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
     const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
@@ -248,6 +283,7 @@ void TaskMeshRendering::DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& curren
     TaskMeshPipelinePushConstant pushData{
         .modelMatrix = stanfordBunny.transform.GetMatrix(),
         .sceneData = currentSceneDataBuffer.address,
+        .culledDataBuffer = currentCulledDataBuffer.address,
         .vertexBuffer = vertexBuffer.address,
         .meshletVerticesBuffer = meshletVerticesBuffer.address,
         .meshletTrianglesBuffer = meshletTrianglesBuffer.address,
@@ -270,12 +306,15 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
     VkExtent2D extents = swapchain->extent;
 
     AllocatedBuffer& currentSceneDataBuffer = sceneDataBuffers[currentFrameInFlight];
+    AllocatedBuffer& currentCulledDataBuffer = culledReadbackBuffers[currentFrameInFlight];
     //
     {
-        constexpr glm::vec3 cameraLookAt{0.0f, 0.0f, 0.0f};
-        constexpr glm::vec3 up{0.0f, 1.0f, 0.0f};
+        freeCamera.Update(dt);
+        const glm::vec3 cameraPos = freeCamera.GetPosition();
+        const glm::vec3 forward = freeCamera.GetForward();
+        const glm::vec3 up = freeCamera.GetUp();
 
-        glm::mat4 view = glm::lookAt(cameraPosition, cameraLookAt, up);
+        glm::mat4 view = glm::lookAt(cameraPos, cameraPos + forward, up);
 
         glm::mat4 proj = glm::perspective(
             glm::radians(75.0f),
@@ -287,10 +326,17 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         sceneData.view = view;
         sceneData.proj = proj;
         sceneData.viewProj = proj * view;
-        sceneData.cameraWorldPos = {cameraPosition, 1.0f};
+        sceneData.cameraWorldPos = {freeCamera.transform.translation, 1.0f};
         sceneData.frustum = Frustum(sceneData.viewProj);
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         *currentSceneData = sceneData;
+
+        auto currentCulledData = static_cast<CulledData*>(currentCulledDataBuffer.allocationInfo.pMappedData);
+
+        culledData = *currentCulledData;
+        currentCulledData->frustumCulled = 0;
+        currentCulledData->backfaceCulled = 0;
+        currentCulledData->totalCulled = 0;
     }
 
     VkCommandBuffer cmd = frameSync.commandBuffer;
@@ -312,9 +358,17 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
-    //DrawTaskMeshSample(extents, currentSceneDataBuffer, cmd);
-    //DrawMeshOnly(extents, currentSceneDataBuffer, cmd);
-    DrawTaskMesh(extents, currentSceneDataBuffer, cmd);
+    switch (currentRenderMode) {
+        case RenderMode::Basic:
+            DrawTaskMeshSample(extents, currentSceneDataBuffer, cmd);
+            break;
+        case RenderMode::MeshOnly:
+            DrawMeshOnly(extents, currentSceneDataBuffer, cmd);
+            break;
+        case RenderMode::TaskMesh:
+            DrawTaskMesh(extents, currentSceneDataBuffer, currentCulledDataBuffer, cmd);
+            break;
+    }
 
 
     // Imgui Draw

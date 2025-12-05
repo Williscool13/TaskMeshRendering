@@ -51,6 +51,13 @@ struct SceneData
     float deltaTime{};
 };
 
+struct CulledData
+{
+    uint32_t frustumCulled{0};
+    uint32_t backfaceCulled{0};
+    uint32_t totalCulled{0};
+};
+
 struct Vertex
 {
     glm::vec3 position{0.0f};

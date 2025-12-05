@@ -16,6 +16,7 @@
 #include "vk_resources.h"
 #include "vk_synchronization.h"
 #include "vk_types.h"
+#include "camera/free_camera.h"
 #include "pipelines/mesh_only_pipeline.h"
 #include "pipelines/task_mesh_pipeline.h"
 #include "pipelines/task_mesh_sample_pipeline.h"
@@ -37,13 +38,22 @@ public:
 
     void DrawMeshOnly(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
 
-    void DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
+    void DrawTaskMesh(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, AllocatedBuffer& currentCulledDataBuffer, VkCommandBuffer cmd) const;
 
     void Render(float dt, uint32_t currentFrameInFlight, const FrameSynchronization& frameSync, ImDrawDataSnapshot& imDrawDataSnapshot);
 
     void Cleanup();
 
     static ExtractedMeshletModel LoadStanfordBunny();
+
+    enum class RenderMode
+    {
+        Basic,
+        MeshOnly,
+        TaskMesh
+    };
+
+    RenderMode currentRenderMode = RenderMode::TaskMesh;
 
 private:
     SDL_Window* window{nullptr};
@@ -54,12 +64,13 @@ private:
 
     std::array<FrameSynchronization, 3> frameSynchronization;
     std::array<AllocatedBuffer, 3> sceneDataBuffers;
+    std::array<AllocatedBuffer, 3> culledReadbackBuffers;
     std::array<ImDrawDataSnapshot, 3> imguiFrameBuffers{};
 
     bool bShouldExit{false};
     uint64_t frameNumber{0};
     SceneData sceneData{};
-    glm::vec3 cameraPosition{2.0f, 0.0f, 4.0f};
+    FreeCamera freeCamera{{2.0f, 0.5f, 3.0f}, {0.0f, 0.0f, 0.0f}};
 
     AllocatedBuffer vertexBuffer;
     AllocatedBuffer meshletVerticesBuffer;
@@ -72,6 +83,7 @@ private:
     MeshOnlyPipeline meshOnlyPipeline;
     TaskMeshSamplePipeline taskMeshSamplePipeline;
     TaskMeshPipeline taskMeshPipeline;
+    CulledData culledData;
 
 private: // Immediate to simplify asset upload
     VkFence immFence{VK_NULL_HANDLE};
@@ -79,7 +91,6 @@ private: // Immediate to simplify asset upload
     VkCommandBuffer immCommandBuffer{VK_NULL_HANDLE};
     AllocatedBuffer stagingBuffer{};
     OffsetAllocator::Allocator stagingAllocator{1024 * 32};
-
 };
 
 

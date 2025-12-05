@@ -56,7 +56,7 @@ void Input::UpdateFocus(const Uint32 sdlWindowFlags)
 {
     bIsWindowInputFocus = (sdlWindowFlags & SDL_WINDOW_INPUT_FOCUS) != 0;
 
-    if (bIsWindowInputFocus && IsKeyPressed(Key::PERIOD)) {
+    if (bIsWindowInputFocus && IsKeyPressed(Key::F)) {
         bIsCursorActive = !bIsCursorActive;
         if (!window) {
             fmt::println("Input: Attempted to update focus but window is not defined, perhaps init was not called?");

@@ -16,6 +16,7 @@ struct TaskMeshPipelinePushConstant
 {
     glm::mat4 modelMatrix;
     VkDeviceAddress sceneData;
+    VkDeviceAddress culledDataBuffer;
     VkDeviceAddress vertexBuffer;
     VkDeviceAddress meshletVerticesBuffer;
     VkDeviceAddress meshletTrianglesBuffer;
