@@ -109,6 +109,7 @@ void TaskMeshRendering::Initialize()
     // primitiveBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
 
     meshOnlyPipeline = MeshOnlyPipeline(context.get());
+    taskMeshSamplePipeline = TaskMeshSamplePipeline(context.get());
 }
 
 void TaskMeshRendering::Run()
@@ -143,7 +144,7 @@ void TaskMeshRendering::Run()
         FrameSynchronization& currentFrameSync = frameSynchronization[currentFrameInFlight];
         ImDrawDataSnapshot& currentImguiFrameBuffer = imguiFrameBuffers[currentFrameInFlight];
 
-        DrawImgui();
+        GenerateImgui();
         currentImguiFrameBuffer.SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
 
         Render(deltaTime, currentFrameInFlight, currentFrameSync, currentImguiFrameBuffer);
@@ -151,7 +152,7 @@ void TaskMeshRendering::Run()
     }
 }
 
-void TaskMeshRendering::DrawImgui()
+void TaskMeshRendering::GenerateImgui()
 {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
@@ -159,10 +160,71 @@ void TaskMeshRendering::DrawImgui()
 
     if (ImGui::Begin("Main")) {
         ImGui::Text("Hello!");
+        static float pos[3] = {cameraPosition.x, cameraPosition.y, cameraPosition.z};
+        if (ImGui::DragFloat3("Camera Position", pos)) {
+            cameraPosition = {pos[0], pos[1], pos[2]};
+        }
     }
 
     ImGui::End();
     ImGui::Render();
+}
+
+void TaskMeshRendering::DrawTaskMeshSample(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const
+{
+    constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
+    const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+    const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthImageView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({extents.width, extents.height}, &colorAttachment, &depthAttachment);
+
+    vkCmdBeginRendering(cmd, &renderInfo);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, taskMeshSamplePipeline.pipeline.handle);
+
+    VkViewport viewport = VkHelpers::GenerateViewport(extents.width, extents.height);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor = VkHelpers::GenerateScissor(extents.width, extents.height);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    TaskMeshSamplePipelinePushConstant pushData{
+        .modelMatrix = glm::mat4(1.0f),
+        .sceneData = currentSceneDataBuffer.address,
+    };
+
+    vkCmdPushConstants(cmd, taskMeshSamplePipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(TaskMeshSamplePipelinePushConstant), &pushData);
+    vkCmdDrawMeshTasksEXT(cmd, stanfordBunny.meshlets.size(), 1, 1);
+    vkCmdEndRendering(cmd);
+}
+
+void TaskMeshRendering::DrawMeshOnly(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const
+{
+    constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
+    const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+    const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthImageView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+    const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({extents.width, extents.height}, &colorAttachment, &depthAttachment);
+
+
+    vkCmdBeginRendering(cmd, &renderInfo);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshOnlyPipeline.pipeline.handle);
+
+    VkViewport viewport = VkHelpers::GenerateViewport(extents.width, extents.height);
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    VkRect2D scissor = VkHelpers::GenerateScissor(extents.width, extents.height);
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    MeshOnlyPipelinePushConstant pushData{
+        .modelMatrix = stanfordBunny.transform.GetMatrix(),
+        .sceneData = currentSceneDataBuffer.address,
+        .vertexBuffer = vertexBuffer.address,
+        .meshletVerticesBuffer = meshletVerticesBuffer.address,
+        .meshletTrianglesBuffer = meshletTrianglesBuffer.address,
+        .meshletBuffer = meshletBuffer.address,
+    };
+
+    vkCmdPushConstants(cmd, meshOnlyPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT, 0, sizeof(MeshOnlyPipelinePushConstant), &pushData);
+    vkCmdDrawMeshTasksEXT(cmd, stanfordBunny.meshlets.size(), 1, 1);
+    vkCmdEndRendering(cmd);
 }
 
 void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const FrameSynchronization& frameSync, ImDrawDataSnapshot& imDrawDataSnapshot)
@@ -175,11 +237,10 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
     AllocatedBuffer& currentSceneDataBuffer = sceneDataBuffers[currentFrameInFlight];
     //
     {
-        constexpr glm::vec3 cameraPos{0.0f, 0.0f, 5.0f};
         constexpr glm::vec3 cameraLookAt{0.0f, 0.0f, 0.0f};
         constexpr glm::vec3 up{0.0f, 1.0f, 0.0f};
 
-        glm::mat4 view = glm::lookAt(cameraPos, cameraLookAt, up);
+        glm::mat4 view = glm::lookAt(cameraPosition, cameraLookAt, up);
 
         glm::mat4 proj = glm::perspective(
             glm::radians(75.0f),
@@ -191,9 +252,6 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         sceneData.view = view;
         sceneData.proj = proj;
         sceneData.viewProj = proj * view;
-        sceneData.renderTargetSize.x = static_cast<float>(extents.width);
-        sceneData.renderTargetSize.y = static_cast<float>(extents.height);
-        sceneData.deltaTime = dt;
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         *currentSceneData = sceneData;
     }
@@ -217,36 +275,8 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
 
-    //
-    {
-        constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
-        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
-        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthImageView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({extents.width, extents.height}, &colorAttachment, &depthAttachment);
-
-
-        vkCmdBeginRendering(cmd, &renderInfo);
-        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshOnlyPipeline.pipeline.handle);
-
-        VkViewport viewport = VkHelpers::GenerateViewport(extents.width, extents.height);
-        vkCmdSetViewport(cmd, 0, 1, &viewport);
-        VkRect2D scissor = VkHelpers::GenerateScissor(extents.width, extents.height);
-        vkCmdSetScissor(cmd, 0, 1, &scissor);
-
-        MeshOnlyPipelinePushConstant pushData{
-            .modelMatrix = stanfordBunny.transform.GetMatrix(),
-            .sceneData = currentSceneDataBuffer.address,
-            .vertexBuffer = vertexBuffer.address,
-            .meshletVerticesBuffer = meshletVerticesBuffer.address,
-            .meshletTrianglesBuffer = meshletTrianglesBuffer.address,
-            .meshletBuffer = meshletBuffer.address,
-        };
-
-        vkCmdPushConstants(cmd, meshOnlyPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(MeshOnlyPipelinePushConstant), &pushData);
-        vkCmdDrawMeshTasksEXT(cmd, stanfordBunny.meshlets.size(), 1, 1);
-        vkCmdEndRendering(cmd);
-    }
+    DrawTaskMeshSample(extents, currentSceneDataBuffer, cmd);
+    //DrawMeshOnly(extents, currentSceneDataBuffer, cmd);
 
 
     // Imgui Draw

@@ -17,6 +17,7 @@
 #include "vk_synchronization.h"
 #include "vk_types.h"
 #include "pipelines/mesh_only_pipeline.h"
+#include "pipelines/task_mesh_sample_pipeline.h"
 
 class TaskMeshRendering
 {
@@ -29,7 +30,11 @@ public:
 
     void Run();
 
-    void DrawImgui();
+    void GenerateImgui();
+
+    void DrawTaskMeshSample(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
+
+    void DrawMeshOnly(VkExtent2D extents, AllocatedBuffer& currentSceneDataBuffer, VkCommandBuffer cmd) const;
 
     void Render(float dt, uint32_t currentFrameInFlight, const FrameSynchronization& frameSync, ImDrawDataSnapshot& imDrawDataSnapshot);
 
@@ -51,6 +56,7 @@ private:
     bool bShouldExit{false};
     uint64_t frameNumber{0};
     SceneData sceneData{};
+    glm::vec3 cameraPosition{2.0f, 0.0f, 4.0f};
 
     AllocatedBuffer vertexBuffer;
     AllocatedBuffer meshletVerticesBuffer;
@@ -60,6 +66,7 @@ private:
 
     ExtractedMeshletModel stanfordBunny;
     MeshOnlyPipeline meshOnlyPipeline;
+    TaskMeshSamplePipeline taskMeshSamplePipeline;
 
 private: // Immediate to simplify asset upload
     VkFence immFence{VK_NULL_HANDLE};

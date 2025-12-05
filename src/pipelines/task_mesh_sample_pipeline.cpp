@@ -2,7 +2,7 @@
 // Created by William on 2025-12-05.
 //
 
-#include "mesh_only_pipeline.h"
+#include "task_mesh_sample_pipeline.h"
 
 #include <fmt/format.h>
 
@@ -10,15 +10,15 @@
 #include "src/vk_pipelines.h"
 #include "src/vk_render_targets.h"
 
-MeshOnlyPipeline::MeshOnlyPipeline() = default;
+TaskMeshSamplePipeline::TaskMeshSamplePipeline() = default;
 
-MeshOnlyPipeline::~MeshOnlyPipeline() = default;
+TaskMeshSamplePipeline::~TaskMeshSamplePipeline() = default;
 
-MeshOnlyPipeline::MeshOnlyPipeline(VulkanContext* context) : context(context)
+TaskMeshSamplePipeline::TaskMeshSamplePipeline(VulkanContext* context) : context(context)
 {
     VkPushConstantRange renderPushConstantRange{};
     renderPushConstantRange.offset = 0;
-    renderPushConstantRange.size = sizeof(MeshOnlyPipelinePushConstant);
+    renderPushConstantRange.size = sizeof(TaskMeshSamplePipelinePushConstant);
     renderPushConstantRange.stageFlags = VK_SHADER_STAGE_MESH_BIT_EXT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
@@ -30,20 +30,25 @@ MeshOnlyPipeline::MeshOnlyPipeline(VulkanContext* context) : context(context)
 
     pipelineLayout = VkResources::CreatePipelineLayout(context, pipelineLayoutCreateInfo);
 
+    VkShaderModule taskShader;
     VkShaderModule meshShader;
     VkShaderModule fragShader;
-    if (!VkHelpers::LoadShaderModule("shaders\\meshOnly_mesh.spv", context->device, &meshShader)) {
-        fmt::println("Couldn't create shader module (meshOnly_mesh)");
+    if (!VkHelpers::LoadShaderModule("shaders\\sample_task.spv", context->device, &taskShader)) {
+        fmt::println("Couldn't create shader module (sample_task)");
         exit(1);
     }
-    if (!VkHelpers::LoadShaderModule("shaders\\meshOnly_fragment.spv", context->device, &fragShader)) {
-        fmt::println("Couldn't create shader module (meshOnly_fragment)");
+    if (!VkHelpers::LoadShaderModule("shaders\\sample_mesh.spv", context->device, &meshShader)) {
+        fmt::println("Couldn't create shader module (sample_mesh)");
+        exit(1);
+    }
+    if (!VkHelpers::LoadShaderModule("shaders\\sample_fragment.spv", context->device, &fragShader)) {
+        fmt::println("Couldn't create shader module (sample_fragment)");
         exit(1);
     }
 
     RenderPipelineBuilder pipelineBuilder;
 
-    pipelineBuilder.SetMeshShader(meshShader, fragShader);
+    pipelineBuilder.SetTaskMeshShaders(taskShader, meshShader, fragShader);
     pipelineBuilder.SetupInputAssembly(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     pipelineBuilder.SetupRasterization(VK_POLYGON_MODE_FILL, VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
     pipelineBuilder.DisableMultisampling();
@@ -53,11 +58,12 @@ MeshOnlyPipeline::MeshOnlyPipeline(VulkanContext* context) : context(context)
     VkGraphicsPipelineCreateInfo pipelineCreateInfo = pipelineBuilder.GeneratePipelineCreateInfo();
     pipeline = VkResources::CreateGraphicsPipeline(context, pipelineCreateInfo);
 
+    vkDestroyShaderModule(context->device, taskShader, nullptr);
     vkDestroyShaderModule(context->device, meshShader, nullptr);
-    vkDestroyShaderModule(context->device, fragShader, nullptr);
+    vkDestroyShaderModule(context->device, fragShader   , nullptr);
 }
 
-MeshOnlyPipeline::MeshOnlyPipeline(MeshOnlyPipeline&& other) noexcept
+TaskMeshSamplePipeline::TaskMeshSamplePipeline(TaskMeshSamplePipeline&& other) noexcept
 {
     pipelineLayout = std::move(other.pipelineLayout);
     pipeline = std::move(other.pipeline);
@@ -65,7 +71,7 @@ MeshOnlyPipeline::MeshOnlyPipeline(MeshOnlyPipeline&& other) noexcept
     other.context = nullptr;
 }
 
-MeshOnlyPipeline& MeshOnlyPipeline::operator=(MeshOnlyPipeline&& other) noexcept
+TaskMeshSamplePipeline& TaskMeshSamplePipeline::operator=(TaskMeshSamplePipeline&& other) noexcept
 {
     if (this != &other) {
         pipelineLayout = std::move(other.pipelineLayout);

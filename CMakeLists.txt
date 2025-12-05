@@ -151,6 +151,9 @@ target_link_libraries(TaskMeshRendering PUBLIC
 )
 
 compile_shaders(TaskMeshRendering
+        ${CMAKE_SOURCE_DIR}/shaders/sample.slang task taskMain
+        ${CMAKE_SOURCE_DIR}/shaders/sample.slang mesh meshMain
+        ${CMAKE_SOURCE_DIR}/shaders/sample.slang fragment fragmentMain
         ${CMAKE_SOURCE_DIR}/shaders/meshOnly.slang mesh meshMain
         ${CMAKE_SOURCE_DIR}/shaders/meshOnly.slang fragment fragmentMain
 )
