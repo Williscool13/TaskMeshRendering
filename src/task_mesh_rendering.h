@@ -16,6 +16,7 @@
 #include "vk_resources.h"
 #include "vk_synchronization.h"
 #include "vk_types.h"
+#include "pipelines/mesh_only_pipeline.h"
 
 class TaskMeshRendering
 {
@@ -51,7 +52,14 @@ private:
     uint64_t frameNumber{0};
     SceneData sceneData{};
 
+    AllocatedBuffer vertexBuffer;
+    AllocatedBuffer meshletVerticesBuffer;
+    AllocatedBuffer meshletTrianglesBuffer;
+    AllocatedBuffer meshletBuffer;
+    AllocatedBuffer primitiveBuffer;
+
     ExtractedMeshletModel stanfordBunny;
+    MeshOnlyPipeline meshOnlyPipeline;
 
 private: // Immediate to simplify asset upload
     VkFence immFence{VK_NULL_HANDLE};

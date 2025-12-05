@@ -4,7 +4,7 @@ project(TaskMeshRendering)
 set(CMAKE_CXX_STANDARD 20)
 
 # Scroll all the way down for the important part
-
+add_definitions(-DGLM_FORCE_DEPTH_ZERO_TO_ONE)
 add_subdirectory(extern/fmt)
 add_subdirectory(extern/SDL EXCLUDE_FROM_ALL)
 add_subdirectory(extern/volk)
@@ -110,6 +110,8 @@ add_executable(TaskMeshRendering
         src/vk_render_targets.h
         src/vk_resources.cpp
         src/vk_resources.h
+        src/vk_pipelines.cpp
+        src/vk_pipelines.h
         src/vk_utils.cpp
         src/vk_utils.h
         src/vk_helpers.cpp
@@ -120,6 +122,14 @@ add_executable(TaskMeshRendering
         src/input.h
         src/time.cpp
         src/time.h
+        src/pipelines/mesh_only_pipeline.cpp
+        src/pipelines/mesh_only_pipeline.h
+        src/pipelines/task_mesh_pipeline.cpp
+        src/pipelines/task_mesh_pipeline.h
+        src/pipelines/task_mesh_indirect_pipeline.cpp
+        src/pipelines/task_mesh_indirect_pipeline.h
+        src/pipelines/task_mesh_sample_pipeline.cpp
+        src/pipelines/task_mesh_sample_pipeline.h
 )
 
 target_include_directories(TaskMeshRendering PUBLIC

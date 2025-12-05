@@ -50,7 +50,7 @@ void TaskMeshRendering::Initialize()
     int32_t w;
     int32_t h;
     SDL_GetWindowSize(window, &w, &h);
-    // Input::Get().Init(window, w, h);
+    Input::Get().Init(window, w, h);
 
     context = std::make_unique<VulkanContext>(window);
     swapchain = std::make_unique<Swapchain>(context.get(), w, h);
@@ -83,6 +83,32 @@ void TaskMeshRendering::Initialize()
     stagingBuffer = VkResources::CreateAllocatedStagingBuffer(context.get(), 1024 * 32);
 
     stanfordBunny = LoadStanfordBunny();
+
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    bufferInfo.size = sizeof(Vertex) * stanfordBunny.vertices.size();
+    vertexBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
+    memcpy(vertexBuffer.allocationInfo.pMappedData, stanfordBunny.vertices.data(), bufferInfo.size);
+
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    bufferInfo.size = sizeof(uint32_t) * stanfordBunny.meshletVertices.size();
+    meshletVerticesBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
+    memcpy(meshletVerticesBuffer.allocationInfo.pMappedData, stanfordBunny.meshletVertices.data(), bufferInfo.size);
+
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    bufferInfo.size = sizeof(uint8_t) * stanfordBunny.meshletTriangles.size();
+    meshletTrianglesBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
+    memcpy(meshletTrianglesBuffer.allocationInfo.pMappedData, stanfordBunny.meshletTriangles.data(), bufferInfo.size);
+
+    bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    bufferInfo.size = sizeof(Meshlet) * stanfordBunny.meshlets.size();
+    meshletBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
+    memcpy(meshletBuffer.allocationInfo.pMappedData, stanfordBunny.meshlets.data(), bufferInfo.size);
+
+    // bufferInfo.usage = VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT;
+    // bufferInfo.size = sizeof(MeshletPrimitive) * 100;
+    // primitiveBuffer = VkResources::CreateAllocatedBuffer(context.get(), bufferInfo, vmaAllocInfo);
+
+    meshOnlyPipeline = MeshOnlyPipeline(context.get());
 }
 
 void TaskMeshRendering::Run()
@@ -146,11 +172,12 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
 
     VkExtent2D extents = swapchain->extent;
 
+    AllocatedBuffer& currentSceneDataBuffer = sceneDataBuffers[currentFrameInFlight];
     //
     {
-        constexpr glm::vec3 cameraPos{0, 0, -4};
-        constexpr glm::vec3 cameraLookAt{};
-        constexpr glm::vec3 up{0, 1, 0};
+        constexpr glm::vec3 cameraPos{0.0f, 0.0f, 5.0f};
+        constexpr glm::vec3 cameraLookAt{0.0f, 0.0f, 0.0f};
+        constexpr glm::vec3 up{0.0f, 1.0f, 0.0f};
 
         glm::mat4 view = glm::lookAt(cameraPos, cameraLookAt, up);
 
@@ -167,8 +194,6 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         sceneData.renderTargetSize.x = static_cast<float>(extents.width);
         sceneData.renderTargetSize.y = static_cast<float>(extents.height);
         sceneData.deltaTime = dt;
-
-        AllocatedBuffer& currentSceneDataBuffer = sceneDataBuffers[currentFrameInFlight];
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         *currentSceneData = sceneData;
     }
@@ -191,6 +216,38 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         auto dependencyInfo = VkHelpers::DependencyInfo(&barrier);
         vkCmdPipelineBarrier2(cmd, &dependencyInfo);
     }
+
+    //
+    {
+        constexpr VkClearValue colorClear = {.color = {0.0f, 0.2f, 0.1f, 1.0f}};
+        const VkRenderingAttachmentInfo colorAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->drawImageView.handle, &colorClear, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        constexpr VkClearValue depthClear = {.depthStencil = {0.0f, 0u}};
+        const VkRenderingAttachmentInfo depthAttachment = VkHelpers::RenderingAttachmentInfo(renderTargets->depthImageView.handle, &depthClear, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+        const VkRenderingInfo renderInfo = VkHelpers::RenderingInfo({extents.width, extents.height}, &colorAttachment, &depthAttachment);
+
+
+        vkCmdBeginRendering(cmd, &renderInfo);
+        vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, meshOnlyPipeline.pipeline.handle);
+
+        VkViewport viewport = VkHelpers::GenerateViewport(extents.width, extents.height);
+        vkCmdSetViewport(cmd, 0, 1, &viewport);
+        VkRect2D scissor = VkHelpers::GenerateScissor(extents.width, extents.height);
+        vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+        MeshOnlyPipelinePushConstant pushData{
+            .modelMatrix = stanfordBunny.transform.GetMatrix(),
+            .sceneData = currentSceneDataBuffer.address,
+            .vertexBuffer = vertexBuffer.address,
+            .meshletVerticesBuffer = meshletVerticesBuffer.address,
+            .meshletTrianglesBuffer = meshletTrianglesBuffer.address,
+            .meshletBuffer = meshletBuffer.address,
+        };
+
+        vkCmdPushConstants(cmd, meshOnlyPipeline.pipelineLayout.handle, VK_SHADER_STAGE_MESH_BIT_EXT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(MeshOnlyPipelinePushConstant), &pushData);
+        vkCmdDrawMeshTasksEXT(cmd, stanfordBunny.meshlets.size(), 1, 1);
+        vkCmdEndRendering(cmd);
+    }
+
 
     // Imgui Draw
     {

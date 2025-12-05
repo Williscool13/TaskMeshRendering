@@ -12,7 +12,6 @@ struct PushConstant {
 
     SceneData* sceneData;
     VertexData* vertexBuffer;
-    MeshletPrimitiveData* primitiveBuffer;
     MeshletVerticesData* meshletVerticesBuffer;
     MeshletTrianglesData* meshletTrianglesBuffer;
     MeshletData* meshletBuffer;
@@ -37,6 +36,15 @@ void meshMain(
 
     SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
     uint32_t instanceIndex = gtid.x;
+
+    uint meshletID = groupId.x;
+    uint hash = meshletID * 747796405u + 2891336453u;
+    float3 color = float3(
+        (hash & 0xFF) / 255.0,
+        ((hash >> 8) & 0xFF) / 255.0,
+        ((hash >> 16) & 0xFF) / 255.0
+    );
+
     for (uint i = instanceIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer->meshletVertices[meshlet.meshletVerticesOffset + i].vertexIndex;
         Vertex v = pushConstant.vertexBuffer->vertices[meshlet.vertexOffset + localVertexIndex];
@@ -45,15 +53,6 @@ void meshMain(
         float4 clipPos = mul(viewProj, worldPos);
 
         vertices[i].position = clipPos;
-
-        uint meshletID = groupId.x;
-        uint hash = meshletID * 747796405u + 2891336453u;
-        float3 color = float3(
-            (hash & 0xFF) / 255.0,
-            ((hash >> 8) & 0xFF) / 255.0,
-            ((hash >> 16) & 0xFF) / 255.0
-        );
-
         vertices[i].color = float4(color, 1.0);
     }
 
