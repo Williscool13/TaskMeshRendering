@@ -43,6 +43,7 @@ Everything you need is included - assets, dependencies, and code are all package
 - Mouse - Look around
 - O/P - Decrease/Increase camera speed
 - F - Focus application
+- G - Freeze/Unfreeze Culling
 - Escape - Quit
 
 **Render Mode:**
