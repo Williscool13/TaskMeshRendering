@@ -62,7 +62,7 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
 
     // group thread count is only 64, will never exceed uint8
     uint8_t threadMeshletOffset = (uint8_t)gtid.x;
-    uint groupMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - (gid.x * TASK_SHADER_DISPATCH_X));
+    uint groupMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - groupMeshletOffset);
 
     if (threadMeshletOffset < groupMeshletCount) {
         uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset;
@@ -77,7 +77,7 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
         // Frustum Cull
         bool frustumVisible = true;
         for (uint i = 0; i < 6; i++) {
-            float dist = dot(pushConstant.sceneData.frustum.planes[i].xyz, worldBounds.xyz) + pushConstant.sceneData.frustum.planes[i].w;
+            float dist = dot(pushConstant.sceneData.frozenFrustum.planes[i].xyz, worldBounds.xyz) + pushConstant.sceneData.frozenFrustum.planes[i].w;
             frustumVisible &= (dist >= -worldBounds.w);
         }
         visible &= frustumVisible;
@@ -88,7 +88,7 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
         // Backface cull from meshoptimizer.h
         // visible = dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius
         float3 worldConeAxis = normalize(mul((float3x3)pushConstant.modelMatrix, meshlet.coneAxis));
-        float3 cameraToCenter = worldCenter - pushConstant.sceneData->cameraWorldPos.xyz;
+        float3 cameraToCenter = worldCenter - pushConstant.sceneData->frozenCameraWorldPos.xyz;
         float centerDist = length(cameraToCenter);
         bool backfaceVisible = dot(cameraToCenter, worldConeAxis) < meshlet.coneCutoff * centerDist + meshlet.meshletBoundingSphere.w;
         visible &= backfaceVisible;

@@ -154,18 +154,27 @@ void TaskMeshRendering::Run()
 
 void TaskMeshRendering::GenerateImgui()
 {
+
+    if (Input::Get().IsKeyPressed(Key::G)) {
+        frozen = !frozen;
+        if (frozen) {
+            frozenSceneData = sceneData;
+        }
+    }
+
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
     if (ImGui::Begin("Main")) {
         ImGui::SeparatorText("Camera Controls");
+        ImGui::Text("F: Focus application");
+        ImGui::Text("G: Freeze Culling (%s)", frozen ? "Frozen" : "Not Frozen");
         ImGui::Text("WASD: Move camera");
         ImGui::Text("Left CTRL/Space: Move down/up");
         ImGui::Text("Mouse: Look around");
         ImGui::Text("O/P: Decrease/Increase speed");
         ImGui::Text("Current speed: %.2f", freeCamera.speed);
-        ImGui::Text("F: Focus application");
         ImGui::Text("Escape: Quit");
 
 
@@ -328,6 +337,21 @@ void TaskMeshRendering::Render(float dt, uint32_t currentFrameInFlight, const Fr
         sceneData.viewProj = proj * view;
         sceneData.cameraWorldPos = {freeCamera.transform.translation, 1.0f};
         sceneData.frustum = Frustum(sceneData.viewProj);
+
+        if (frozen) {
+            sceneData.frozenView = frozenSceneData.view;
+            sceneData.frozenProj = frozenSceneData.proj;
+            sceneData.frozenViewProj = frozenSceneData.viewProj;
+            sceneData.frozenCameraWorldPos = frozenSceneData.cameraWorldPos;
+            sceneData.frozenFrustum = frozenSceneData.frustum;
+        } else {
+            sceneData.frozenView = sceneData.view;
+            sceneData.frozenProj = sceneData.proj;
+            sceneData.frozenViewProj = sceneData.viewProj;
+            sceneData.frozenCameraWorldPos = sceneData.cameraWorldPos;
+            sceneData.frozenFrustum = sceneData.frustum;
+        }
+
         auto currentSceneData = static_cast<SceneData*>(currentSceneDataBuffer.allocationInfo.pMappedData);
         *currentSceneData = sceneData;
 
@@ -558,8 +582,8 @@ ExtractedMeshletModel TaskMeshRendering::LoadStanfordBunny()
     const size_t maxTriangles = 64;
 
     // build clusters (meshlets) out of the mesh
-    size_t max_meshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
-    std::vector<meshopt_Meshlet> meshlets(max_meshlets);
+    size_t maxMeshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
+    std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
     std::vector<unsigned int> meshletVertices(primitiveIndices.size());
     std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
 

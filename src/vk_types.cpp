@@ -48,8 +48,8 @@ Frustum::Frustum(const glm::mat4& viewProj)
         viewProj[3][3] - viewProj[3][2]
     );
 
-    for (int i = 0; i < 6; i++) {
-        float length = glm::length(glm::vec3(planes[i]));
-        planes[i] /= length;
+    for (auto& plane : planes) {
+        float length = glm::length(glm::vec3(plane));
+        plane /= length;
     }
 }

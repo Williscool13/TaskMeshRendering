@@ -70,6 +70,8 @@ private:
     bool bShouldExit{false};
     uint64_t frameNumber{0};
     SceneData sceneData{};
+    bool frozen = false;
+    SceneData frozenSceneData{};
     FreeCamera freeCamera{{2.0f, 0.5f, 3.0f}, {0.0f, 0.0f, 0.0f}};
 
     AllocatedBuffer vertexBuffer;

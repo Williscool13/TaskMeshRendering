@@ -71,9 +71,15 @@ public struct SceneData
     public float4x4 proj;
     public float4x4 viewProj;
 
+    public float4x4 frozenView;
+    public float4x4 frozenProj;
+    public float4x4 frozenViewProj;
+
     public float4 cameraWorldPos;
+    public float4 frozenCameraWorldPos;
 
     public Frustum frustum;
+    public Frustum frozenFrustum;
 
     public float2 renderTargetSize;
     float2 texelSize;

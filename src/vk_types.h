@@ -41,9 +41,15 @@ struct SceneData
     glm::mat4 proj{1.0f};
     glm::mat4 viewProj{1.0f};
 
+    glm::mat4 frozenView{1.0f};
+    glm::mat4 frozenProj{1.0f};
+    glm::mat4 frozenViewProj{1.0f};
+
     glm::vec4 cameraWorldPos{0.0f};
+    glm::vec4 frozenCameraWorldPos{0.0f};
 
     Frustum frustum{};
+    Frustum frozenFrustum{};
 
     glm::vec2 renderTargetSize{};
     glm::vec2 texelSize{};

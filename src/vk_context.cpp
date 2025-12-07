@@ -56,11 +56,6 @@ VulkanContext::VulkanContext(SDL_Window* window)
     features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
     VkPhysicalDeviceFeatures otherFeatures{};
 
-    // Descriptor Buffer Extension
-    VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptorBufferFeatures = {};
-    descriptorBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
-    descriptorBufferFeatures.descriptorBuffer = VK_TRUE;
-
     // Task/Mesh Shader Extension
     VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = {};
     meshShaderFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT;
@@ -74,15 +69,6 @@ VulkanContext::VulkanContext(SDL_Window* window)
     // GPU Driven Rendering
     features12.bufferDeviceAddress = VK_TRUE;
     features12.runtimeDescriptorArray = VK_TRUE;
-    features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-    features12.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
-    features12.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
-    features12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
-    features12.drawIndirectCount = VK_TRUE;
-    otherFeatures.multiDrawIndirect = VK_TRUE;
-
-    // SV_VertexID
-    features11.shaderDrawParameters = VK_TRUE;
 
     // uint8_t/int8_t support
     features12.shaderInt8 = VK_TRUE;
@@ -106,7 +92,6 @@ VulkanContext::VulkanContext(SDL_Window* window)
             .value();
 
     vkb::DeviceBuilder deviceBuilder{targetDevice};
-    deviceBuilder.add_pNext(&descriptorBufferFeatures);
     deviceBuilder.add_pNext(&meshShaderFeatures);
     vkb::Device vkbDevice = deviceBuilder.build().value();
 
